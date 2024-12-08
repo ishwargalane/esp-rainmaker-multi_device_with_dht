@@ -30,6 +30,7 @@ esp_rmaker_device_t *switch_device;
 esp_rmaker_device_t *light_device;
 esp_rmaker_device_t *fan_device;
 esp_rmaker_device_t *temp_sensor_device;
+esp_rmaker_device_t *humidity_sensor_device;
 
 /* Callback to handle commands received from the RainMaker cloud */
 static esp_err_t write_cb(const esp_rmaker_device_t *device, const esp_rmaker_param_t *param,
@@ -119,6 +120,10 @@ void app_main()
     /* Create a Temperature Sensor device and add the relevant parameters to it */
     temp_sensor_device = esp_rmaker_temp_sensor_device_create("Temperature Sensor", NULL, app_get_current_temperature());
     esp_rmaker_node_add_device(node, temp_sensor_device);
+
+    /* Create a Humidity Sensor device and add the relevant parameters to it */
+    humidity_sensor_device = esp_rmaker_temp_sensor_device_create("Humidity Sensor", NULL, app_get_current_humidity());
+    esp_rmaker_node_add_device(node, humidity_sensor_device);
 
     /* Enable OTA */
     esp_rmaker_ota_enable_default();

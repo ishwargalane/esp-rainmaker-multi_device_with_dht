@@ -47,33 +47,40 @@ static const char *TAG = "ESP-RMAKER-SENSOR";
 #define NUM_READINGS 12
 
 // Need to read multiple times to get an average. Otherwise, the readings can be noisy.
-static float read_average_temperature()
+static void set_average_temperature_humidity()
 {
-    float total_temperature = 0;
-    float total_humidity = 0;
-    for (int i = 0; i < NUM_READINGS; i++) {
-        if (dht_read_float_data(DHT_SENSOR_TYPE, DHT_GPIO_PIN, &g_humidity, &g_temperature) == ESP_OK) {
-            total_temperature += g_temperature;
-            total_humidity += g_humidity;
+    while (1) {
+        float total_temperature = 0;
+        float total_humidity = 0;
+        for (int i = 0; i < NUM_READINGS; i++) {
+            if (dht_read_float_data(DHT_SENSOR_TYPE, DHT_GPIO_PIN, &g_humidity, &g_temperature) == ESP_OK) {
+                ESP_LOGI(TAG, "Humidity: %.1f%% Temp: %.1fC\n", g_humidity, g_temperature);
+                total_temperature += g_temperature;
+                total_humidity += g_humidity;
+            }else{
+                ESP_LOGI(TAG, "Could not read data from sensor\n");
+            }
+            vTaskDelay(5000 / portTICK_PERIOD_MS); // Delay between readings
         }
-        vTaskDelay(500 / portTICK_PERIOD_MS); // Delay between readings
+        g_temperature = total_temperature / NUM_READINGS;
+        g_humidity = total_humidity / NUM_READINGS;
     }
-    g_temperature = total_temperature / NUM_READINGS;
-    g_humidity = total_humidity / NUM_READINGS;
-    return g_temperature;
 }
 
-static void app_sensor_update(TimerHandle_t handle)
+static void app_temperature_sensor_update(TimerHandle_t handle)
 {
-
-    if (read_average_temperature(DHT_SENSOR_TYPE, DHT_GPIO_PIN, &g_humidity,  &g_temperature) == ESP_OK)
-        ESP_LOGI(TAG, "Humidity: %.1f%% Temp: %.1fC\n", g_humidity, g_temperature);
-    else
-        ESP_LOGI(TAG, "Could not read data from sensor\n");
-
+    ESP_LOGI(TAG, "Updating Temp: %.1fC\n", g_temperature);
     esp_rmaker_param_update_and_report(
                 esp_rmaker_device_get_param_by_type(temp_sensor_device, ESP_RMAKER_PARAM_TEMPERATURE),
                 esp_rmaker_float(g_temperature));
+}
+
+static void app_humidity_sensor_update(TimerHandle_t handle)
+{
+    ESP_LOGI(TAG, "Updating Humidity: %.1f%%\n", g_humidity);
+    esp_rmaker_param_update_and_report(
+                esp_rmaker_device_get_param_by_type(humidity_sensor_device, ESP_RMAKER_PARAM_TEMPERATURE),
+                esp_rmaker_float(g_humidity));
 }
 
 float app_get_current_temperature()
@@ -81,11 +88,28 @@ float app_get_current_temperature()
     return g_temperature;
 }
 
-esp_err_t app_sensor_init(void)
+float app_get_current_humidity()
+{
+    return g_humidity;
+}
+
+esp_err_t app_temperature_sensor_init(void)
 {
     g_temperature = DEFAULT_TEMPERATURE;
-    sensor_timer = xTimerCreate("app_sensor_update_tm", (REPORTING_PERIOD * 1000) / portTICK_PERIOD_MS,
-                            pdTRUE, NULL, app_sensor_update);
+    sensor_timer = xTimerCreate("app_temperature_sensor_update", (REPORTING_PERIOD * 1000) / portTICK_PERIOD_MS,
+                            pdTRUE, NULL, app_temperature_sensor_update);
+    if (sensor_timer) {
+        xTimerStart(sensor_timer, 0);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t app_humidity_sensor_init(void)
+{
+    g_temperature = DEFAULT_TEMPERATURE;
+    sensor_timer = xTimerCreate("app_humidity_sensor_update", (REPORTING_PERIOD * 1000) / portTICK_PERIOD_MS,
+                            pdTRUE, NULL, app_humidity_sensor_update);
     if (sensor_timer) {
         xTimerStart(sensor_timer, 0);
         return ESP_OK;
@@ -142,7 +166,10 @@ void app_driver_init()
     /* Configure the GPIO */
     gpio_config(&io_conf);
     app_indicator_init();
-    app_sensor_init();
+    app_temperature_sensor_init();
+    app_humidity_sensor_init();
+    xTaskCreate(set_average_temperature_humidity, "set_average_temperature_humidity", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+
 }
 
 int IRAM_ATTR app_driver_set_state(bool state)
