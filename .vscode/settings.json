@@ -8,6 +8,7 @@
     "target/esp32.cfg"
   ],
   "files.associations": {
-    "ws2812_led.h": "c"
+    "ws2812_led.h": "c",
+    "app_priv.h": "c"
   }
 }
